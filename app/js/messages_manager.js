@@ -1340,7 +1340,7 @@ angular.module('myApp.services')
       })
     }
 
-    function sendText (peerID, text, options) {
+    function sendText (peerID, text, options, callback) {
       if (!angular.isString(text)) {
         return
       }
@@ -1493,6 +1493,9 @@ angular.module('myApp.services')
               }
             })
           }
+          if(callback){
+            callback();
+          }
           ApiUpdatesManager.processUpdateMessage(updates)
         }, function (error) {
           toggleError(true)
@@ -1521,7 +1524,8 @@ angular.module('myApp.services')
       pendingByRandomID[randomIDS] = [peerID, messageID]
     }
 
-    function sendFile (peerID, file, options) {
+    function sendFile (peerID, file, options, callback) {
+      console.log("FILE RECIEVED:", peerID, file, options);
       options = options || {}
       var messageID = tempID--
       var randomID = [nextRandomInt(0xFFFFFFFF), nextRandomInt(0xFFFFFFFF)]
@@ -1658,8 +1662,14 @@ angular.module('myApp.services')
               random_id: randomID,
               reply_to_msg_id: AppMessagesIDsManager.getMessageLocalID(replyToMsgID)
             }).then(function (updates) {
+              if(callback){
+                callback();
+              }
               ApiUpdatesManager.processUpdateMessage(updates)
             }, function (error) {
+              if(callback){
+                callback(error);
+              }
               if (attachType == 'photo' &&
                 error.code == 400 &&
                 (error.type == 'PHOTO_INVALID_DIMENSIONS' ||
@@ -2319,7 +2329,7 @@ angular.module('myApp.services')
       return messagesForHistory[msgID] = message
     }
 
-    function wrapReplyMarkup (replyMarkup, fromID) {
+    function wrapReplyMarkup (replyMarkup) {
       if (!replyMarkup ||
         replyMarkup._ == 'replyKeyboardHide') {
         return false
@@ -2340,9 +2350,7 @@ angular.module('myApp.services')
         angular.forEach(markupRow.buttons, function (markupButton) {
           markupButton.rText = RichTextProcessor.wrapRichText(markupButton.text, {noLinks: true, noLinebreaks: true})
           if (markupButton._ == 'keyboardButtonUrl') {
-            var from = AppUsersManager.getUser(fromID)
-            var unsafe = !(from && from.pFlags && from.pFlags.verified)
-            markupButton.pUrl = RichTextProcessor.wrapUrl(markupButton.url, unsafe)
+            markupButton.pUrl = RichTextProcessor.wrapUrl(markupButton.url, 1)
           }
         })
       })

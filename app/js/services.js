@@ -2800,13 +2800,13 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
           showCallbackMessage(callbackAnswer.message, callbackAnswer.pFlags.alert)
         }
         else if (typeof callbackAnswer.url === 'string') {
-          var url = RichTextProcessor.wrapUrl(callbackAnswer.url, true)
-          LocationParamsService.openUrl(url)
+          LocationParamsService.openUrl(callbackAnswer.url)
         }
       })
     }
 
     function gameButtonClick (id) {
+      console.trace()
       var message = AppMessagesManager.getMessage(id)
       var peerID = AppMessagesManager.getMessagePeer(message)
 
@@ -3516,7 +3516,7 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
     }
   })
 
-  .service('NotificationsManager', function ($rootScope, $window, $interval, $q, $modal, _, toaster, MtpApiManager, AppPeersManager, AppChatsManager, AppUsersManager, IdleManager, Storage, AppRuntimeManager, FileManager, WebPushApiManager) {
+  .service('NotificationsManager', function ($rootScope, $window, $interval, $q, $modal, _, MtpApiManager, AppPeersManager, AppChatsManager, AppUsersManager, IdleManager, Storage, AppRuntimeManager, FileManager, WebPushApiManager) {
     navigator.vibrate = navigator.vibrate || navigator.mozVibrate || navigator.webkitVibrate
 
     var notificationsMsSiteMode = false
@@ -3566,7 +3566,6 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
         if (!newVal) {
           titleChanged = false
           document.title = titleBackup
-          setFavicon()
         } else {
           titleBackup = document.title
 
@@ -3574,11 +3573,9 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
             if (titleChanged || !notificationsCount) {
               titleChanged = false
               document.title = titleBackup
-              setFavicon()
             } else {
               titleChanged = true
               document.title = langNotificationsPluralize(notificationsCount)
-              setFavicon('favicon_unread.ico')
             }
           }, 1000)
         }
@@ -3627,29 +3624,11 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
 
     $rootScope.$on('push_notification_click', function (e, notificationData) {
       if (notificationData.action == 'push_settings') {
-        topMessagesPromise.then(function () {
-          $modal.open({
-            templateUrl: templateUrl('settings_modal'),
-            controller: 'SettingsModalController',
-            windowClass: 'settings_modal_window mobile_modal',
-            backdrop: 'single'
-          })
-        })
-        return
-      }
-      if (notificationData.action == 'mute1d') {
-        MtpApiManager.invokeApi('account.updateDeviceLocked', function () {
-          period: 86400
-        }).then(function () {
-          var toastData = toaster.pop({
-            type: 'info',
-            body: _('push_action_mute1d_success'),
-            bodyOutputType: 'trustedHtml',
-            clickHandler: function () {
-              toaster.clear(toastData)
-            },
-            showCloseButton: false
-          })
+        $modal.open({
+          templateUrl: templateUrl('settings_modal'),
+          controller: 'SettingsModalController',
+          windowClass: 'settings_modal_window mobile_modal',
+          backdrop: 'single'
         })
         return
       }
@@ -3732,21 +3711,6 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
       })
     }
 
-    function setFavicon (href) {
-      href = href || 'favicon.ico'
-      if (prevFavicon === href) {
-        return
-      }
-      var link = document.createElement('link')
-      link.rel = 'shortcut icon'
-      link.type = 'image/x-icon'
-      link.href = href
-      faviconEl.parentNode.replaceChild(link, faviconEl)
-      faviconEl = link
-
-      prevFavicon = href
-    }
-
     function savePeerSettings (peerID, settings) {
       // console.trace(dT(), 'peer settings', peerID, settings)
       peerSettings[peerID] = $q.when(settings)
@@ -3798,7 +3762,6 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
     function stop () {
       notificationsClear()
       $interval.cancel(titlePromise)
-      setFavicon()
       stopped = true
     }
 
@@ -4327,65 +4290,6 @@ angular.module('myApp.services', ['myApp.i18n', 'izhukov.utils'])
     return {
       start: start,
       check: check
-    }
-  })
-
-  .service('LayoutSwitchService', function (ErrorService, Storage, AppRuntimeManager, $window) {
-    var started = false
-    var confirmShown = false
-
-    function switchLayout (mobile) {
-      ConfigStorage.noPrefix()
-      Storage.set({
-        layout_selected: mobile ? 'mobile' : 'desktop',
-        layout_width: $(window).width()
-      }).then(function () {
-        AppRuntimeManager.reload()
-      })
-    }
-
-    function layoutCheck (e) {
-      if (confirmShown) {
-        return
-      }
-      var width = $(window).width()
-      var newMobile = width < 600
-      if (!width ||
-        !e && (Config.Navigator.mobile ? width <= 800 : newMobile)) {
-        return
-      }
-      if (newMobile != Config.Mobile) {
-        ConfigStorage.noPrefix()
-        Storage.get('layout_width').then(function (confirmedWidth) {
-          if (width == confirmedWidth) {
-            return false
-          }
-          confirmShown = true
-          ErrorService.confirm({
-            type: newMobile ? 'SWITCH_MOBILE_VERSION' : 'SWITCH_DESKTOP_VERSION'
-          }).then(function () {
-            switchLayout(newMobile)
-          }, function () {
-            ConfigStorage.noPrefix()
-            Storage.set({layout_width: width})
-            confirmShown = false
-          })
-        })
-      }
-    }
-
-    function start () {
-      if (started || Config.Navigator.mobile) {
-        return
-      }
-      started = true
-      layoutCheck()
-      $($window).on('resize', layoutCheck)
-    }
-
-    return {
-      start: start,
-      switchLayout: switchLayout
     }
   })
 
