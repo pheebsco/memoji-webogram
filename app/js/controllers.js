@@ -95,7 +95,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             canvas.width = 512;
             canvas.height = 512;
             var context = canvas.getContext('2d');
-            context.drawImage(images.layout, 0, 0);
+            context.drawImage(images.layout, 0, 0, images.layout.width, images.layout, 0, 0, 512, 512);
             context.save();
             context.translate(formula.x, formula.y);
             context.rotate(formula.rotation / 180 * Math.PI);
