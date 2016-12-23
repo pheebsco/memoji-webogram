@@ -196,7 +196,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         method: "GET",
         url: "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "/" + packID + "?token=" + Qparams.iid
       }).then(function (response) {
-        $window.location.href = (Qparams.device === "ios")?"https://telegram.me/addstickers/" + packID:"http://memoji.ir/addstickers/"+packID;
+        $window.location.href = (Qparams.device !== "android")?"http://memoji.ir/addstickers/"+packID:"https://telegram.me/addstickers/" + packID;
       });
     }
 
