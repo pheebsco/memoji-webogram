@@ -96,13 +96,15 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             canvas.height = 512;
             var context = canvas.getContext('2d');
             context.drawImage(images.layout, 0, 0, images.layout.width, images.layout.height, 0, 0, 512, 512);
-            context.save();
-            context.translate(formula.x, formula.y);
-            context.rotate(formula.rotation / 180 * Math.PI);
-            context.scale(formula.scale, formula.scale);
-            context.translate(-256, -256);
-            context.drawImage(images.head, 0, 0);
-            context.restore();
+            if (formula) {
+              context.save();
+              context.translate(formula.x, formula.y);
+              context.rotate(formula.rotation / 180 * Math.PI);
+              context.scale(formula.scale, formula.scale);
+              context.translate(-256, -256);
+              context.drawImage(images.head, 0, 0);
+              context.restore();
+            }
             var dataUrl = canvas.toDataURL('image/png');
             var blob = dataUrlToBlob(dataUrl)
             cb(null, blob);
@@ -195,7 +197,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         method: "GET",
         url: "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "/" + packID + "?token=" + Qparams.iid
       }).then(function (response) {
-        $window.location.href = (Qparams.device === "ios")?"https://telegram.me/addstickers/" + packID:"http://memoji.ir/addstickers/"+packID;
+        $window.location.href = (Qparams.device !== "android") ? "http://memoji.ir/addstickers/" + packID : "https://telegram.me/addstickers/" + packID;
       });
     }
 
