@@ -98,8 +98,9 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             context.drawImage(images.layout, 0, 0);
             context.save();
             context.translate(formula.x, formula.y);
-            context.rotate(formula.rotation);
+            context.rotate(formula.rotation / 180 * Math.PI);
             context.scale(formula.scale, formula.scale);
+            context.translate(-256, -256);
             context.drawImage(images.head, 0, 0);
             context.restore();
             canvas.toBlob(function (blob) {
