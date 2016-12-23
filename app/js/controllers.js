@@ -79,7 +79,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
       async.waterfall([
         async.apply(downloadFile, sticker.layout),
         function (layout, cb) {
-          
+
           async.parallel({
             layout: async.apply(loadImage, layout),
             head: async.apply(loadImage, head)
@@ -89,8 +89,8 @@ angular.module('myApp.controllers', ['myApp.i18n'])
               return cb(err);
             }
             console.log("IMAGES LOADED SUCCESSFULLY", images);
-            
-            
+
+
             var canvas = document.createElement('canvas');
             canvas.width = 512;
             canvas.height = 512;
@@ -131,7 +131,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
       }).then(function (response) {
         if (response.data.data) {
           // progressChunk = 100.0 / response.data.data.stickers.length;
-        
+
           cb(null, response.data.data);
         } else {
           cb("INVALID_PURCHASE");
@@ -196,7 +196,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         method: "GET",
         url: "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "/" + packID + "?token=" + Qparams.iid
       }).then(function (response) {
-        $window.location.href = "https://telegram.me/addstickers/" + packID;
+        $window.location.href = (Qparams.device === "ios")?"https://telegram.me/addstickers/" + packID:"http://memoji.ir/addstickers/"+packID;
       });
     }
 
