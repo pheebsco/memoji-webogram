@@ -100,7 +100,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             context.translate(formula.x, formula.y);
             context.rotate(formula.rotation);
             context.scale(formula.scale, formula.scale);
-            context.drawImage(images.head, -256, -256);
+            context.drawImage(images.head, 0, 0);
             context.restore();
             canvas.toBlob(function (blob) {
               console.log("STICKER READY:", blob, URL.createObjectURL(blob));
