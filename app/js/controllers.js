@@ -103,10 +103,9 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             context.translate(-256, -256);
             context.drawImage(images.head, 0, 0);
             context.restore();
-            canvas.toBlob(function (blob) {
-              console.log("STICKER READY:", blob, URL.createObjectURL(blob));
-              cb(null, blob);
-            }, 'image/png');
+            var dataUrl = canvas.toDataURL('image/png');
+            var blob = dataUrlToBlob(dataUrl)
+            cb(null, blob);
           })
         }
       ], cb);
