@@ -75,7 +75,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
 
     function generateSticker(sticker, head, cb) {
       console.log("STICKER TO BE GENERATED:", sticker);
-      var formula = sticker.formula[0];
+      var formula = sticker.formula;
       async.waterfall([
         async.apply(downloadFile, sticker.layout),
         function (layout, cb) {
@@ -96,18 +96,42 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             canvas.height = 512;
             var context = canvas.getContext('2d');
             context.drawImage(images.layout, 0, 0, images.layout.width, images.layout.height, 0, 0, 512, 512);
-            if (formula) {
+
+            function sendSticker(){
+              var dataUrl = canvas.toDataURL('image/png');
+              var blob = dataUrlToBlob(dataUrl)
+              cb(null, blob);
+            }
+
+            formula.forEach(function (f) {
               context.save();
               context.translate(formula.x, formula.y);
               context.rotate(formula.rotation / 180 * Math.PI);
               context.scale(formula.scale, formula.scale);
               context.translate(-256, -256);
-              context.drawImage(images.head, 0, 0);
-              context.restore();
-            }
-            var dataUrl = canvas.toDataURL('image/png');
-            var blob = dataUrlToBlob(dataUrl)
-            cb(null, blob);
+              if(f.resource==="HEAD"){
+                context.drawImage(images.head, 0, 0);
+                context.restore();
+                sendSticker();
+              }
+              else{
+                downloadFile(f.resource, function(err, res){
+                  if(err){
+                    return cb(err);
+                  }
+                  loadImage(res, function(err, img){
+                    if(err){
+                      return cb(err);
+                    }
+                    context.drawImage(img, 0, 0);
+                    context.restore();
+                    sendSticker();
+                  })
+                })
+              }
+            })
+
+
           })
         }
       ], cb);
