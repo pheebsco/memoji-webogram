@@ -96,23 +96,17 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             canvas.height = 512;
             var context = canvas.getContext('2d');
             context.drawImage(images.layout, 0, 0, images.layout.width, images.layout.height, 0, 0, 512, 512);
-
-            function sendSticker(){
-              var dataUrl = canvas.toDataURL('image/png');
-              var blob = dataUrlToBlob(dataUrl)
-              cb(null, blob);
-            }
-
-            formula.forEach(function (f) {
+            async.mapSeries(formula, function (f, cb) {
+              console.log("DRAWING FORMULA:", f);
               context.save();
-              context.translate(formula.x, formula.y);
-              context.rotate(formula.rotation / 180 * Math.PI);
-              context.scale(formula.scale, formula.scale);
+              context.translate(f.x, f.y);
+              context.rotate(f.rotation / 180 * Math.PI);
+              context.scale(f.scale, f.scale);
               context.translate(-256, -256);
               if(f.resource==="HEAD"){
                 context.drawImage(images.head, 0, 0);
                 context.restore();
-                sendSticker();
+                return cb();
               }
               else{
                 downloadFile(f.resource, function(err, res){
@@ -125,10 +119,19 @@ angular.module('myApp.controllers', ['myApp.i18n'])
                     }
                     context.drawImage(img, 0, 0);
                     context.restore();
-                    sendSticker();
+                    cb();
                   })
                 })
               }
+            }, function(err){
+              if(err){
+                console.log("ERR HAPPENED IN CANVAS:", err);
+                return cb(err);
+              }
+              console.log("STICKER READY");
+              var dataUrl = canvas.toDataURL('image/png');
+              var blob = dataUrlToBlob(dataUrl)
+              cb(null, blob);
             })
 
 
