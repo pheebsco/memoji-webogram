@@ -1,7 +1,7 @@
 
-<div class="package_page_wrap" my-custom-background="#ffffff" ng-if="!retry">
+<div class="package_page_wrap" my-custom-background="#ffffff">
     
-  <div class="package_page clearfix">
+  <div class="package_page clearfix" ng-if="!retry">
     <img class="package_image" ng-src="{{image.url}}" />
     <div class="package_message">
         در حال ساخت بسته استیکر
@@ -11,9 +11,9 @@
         </div>
     </div>
   </div>
-</div>
-<div ng-if="retry">
-  <div class="package_message" ng-click="refresh()">
+  <div class="package_page clearfix" ng-if="retry">
+    <div class="package_message package_retry_button" ng-click="refresh()">
         تلاش مجدد
     </div>
+  </div>
 </div>
