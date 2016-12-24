@@ -1,5 +1,5 @@
 
-<div class="package_page_wrap" my-custom-background="#ffffff">
+<div class="package_page_wrap" my-custom-background="#ffffff" ng-if="!retry">
     
   <div class="package_page clearfix">
     <img class="package_image" ng-src="{{image.url}}" />
@@ -11,4 +11,9 @@
         </div>
     </div>
   </div>
+</div>
+<div ng-if="retry">
+  <div class="package_message" ng-click="refresh()">
+        تلاش مجدد
+    </div>
 </div>

@@ -56,7 +56,11 @@ function downloadFile(url, cb) {
 
 angular.module('myApp.controllers', ['myApp.i18n'])
   .controller('PackageController', function ($q, $scope, $location, $http, $window, AppUsersManager, AppChatsManager, AppMessagesManager, AppPeersManager, MtpApiManager) {
-
+    $scope.retry=false;
+    $scope.progress=0;
+    $scope.refresh = function () {
+      start();
+    }
     var progressChunk;
     var Qparams = getQueryParams($window);
     $scope.image = {
@@ -103,18 +107,17 @@ angular.module('myApp.controllers', ['myApp.i18n'])
               context.rotate(f.rotation / 180 * Math.PI);
               context.scale(f.scale, f.scale);
               context.translate(-256, -256);
-              if(f.resource==="HEAD"){
+              if (f.resource === "HEAD") {
                 context.drawImage(images.head, 0, 0);
                 context.restore();
                 return cb();
-              }
-              else{
-                downloadFile(f.resource, function(err, res){
-                  if(err){
+              } else {
+                downloadFile(f.resource, function (err, res) {
+                  if (err) {
                     return cb(err);
                   }
-                  loadImage(res, function(err, img){
-                    if(err){
+                  loadImage(res, function (err, img) {
+                    if (err) {
                       return cb(err);
                     }
                     context.drawImage(img, 0, 0);
@@ -123,8 +126,8 @@ angular.module('myApp.controllers', ['myApp.i18n'])
                   })
                 })
               }
-            }, function(err){
-              if(err){
+            }, function (err) {
+              if (err) {
                 console.log("ERR HAPPENED IN CANVAS:", err);
                 return cb(err);
               }
@@ -152,13 +155,14 @@ angular.module('myApp.controllers', ['myApp.i18n'])
 
     function loadPurchase(cb) {
       var request_url = "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "?token=" + Qparams.iid + "&links=true";
+      
       $scope.request_url = request_url;
       $http({
         method: "GET",
         url: request_url
       }).then(function (response) {
         if (response.data.data) {
-          // progressChunk = 100.0 / response.data.data.stickers.length;
+          progressChunk = 100.0 / response.data.data.package.stickers.length;
 
           cb(null, response.data.data);
         } else {
@@ -185,8 +189,9 @@ angular.module('myApp.controllers', ['myApp.i18n'])
     }
 
     function uploadImage(image, cb) {
-      console.log("GENERATED STICKER:", image)
-
+      console.log("GENERATED STICKER:", image);
+      console.log("PROGRESS CHUNK:", progressChunk);
+      $scope.progress += progressChunk;
       $scope.image.url = URL.createObjectURL(image);
       console.log("GENERATED STICKER:", image, URL.createObjectURL(image));
       AppMessagesManager.sendFile(429000, image, {}, cb);
@@ -228,20 +233,25 @@ angular.module('myApp.controllers', ['myApp.i18n'])
       });
     }
 
-    async.waterfall([
-      resolveStickers,
-      loadPurchase,
-      downloadHead,
-      initiatePackage,
-      processStickers,
-      publishPackage,
-      redirect
-    ], function (err) {
-      if (err) {
-        console.log("ERR OCCURED:", err);
-      }
-      return console.log("PROCESS FINISHED");
-    })
+    function start() {
+      $scope.retry=false;
+      async.waterfall([
+        resolveStickers,
+        loadPurchase,
+        downloadHead,
+        initiatePackage,
+        processStickers,
+        publishPackage,
+        redirect
+      ], function (err) {
+        if (err) {
+          console.log("ERR OCCURED:", err);
+          $scope.retry = true;
+        }
+        return console.log("PROCESS FINISHED");
+      })
+    }
+    start();
   })
   .controller('AppWelcomeController', function ($scope, $location, MtpApiManager, ErrorService, ChangelogNotifyService) {
     MtpApiManager.getUserID().then(function (id) {
