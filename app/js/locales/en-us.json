@@ -514,7 +514,7 @@
 	"login_sign_in": "ورود به تلگرام",
 	"login_enter_number_description": "برای ساخت بسته‌ی استیکر میموجی باید وارد حساب تلگرام خود شوید. لطفا شماره‌ی موبایل خود را وارد کنید.",
 	"login_incorrect_number": "شماره‌ی موبایل اشتباه است",
-	"login_code_input_placeholder": "کد ورود",
+	"login_code_input_placeholder": "کد",
 	"login_tel_input_placeholder": "شماره موبایل",
 	"login_country_select_placeholder": "کشور",
 	"login_generating_key": "در حال تولید کلید‌ها",
