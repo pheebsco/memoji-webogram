@@ -217,10 +217,14 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         });
     }
 
+
     function publishPackage(cb) {
       AppMessagesManager.sendText(429000, "/publish", {});
       var packID = randomPackageId();
       AppMessagesManager.sendText(429000, packID, {});
+      AppMessagesManager.getHistory(429000, null, 50, null).then(function(history){
+        console.log("STICKERS HISTORY", history.history[0]);
+      })
       cb(null, packID);
     }
 
@@ -241,6 +245,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         downloadHead,
         initiatePackage,
         processStickers,
+        sendLinks,
         publishPackage,
         redirect
       ], function (err) {
