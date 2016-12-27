@@ -383,12 +383,12 @@ angular.module('myApp.services')
       })
     }
 
-    function fillHistoryStorage (peerID, maxID, fullLimit, historyStorage) {
+    function fillHistoryStorage (peerID, maxID, fullLimit, historyStorage, cb) {
       // console.log('fill history storage', peerID, maxID, fullLimit, angular.copy(historyStorage))
       var offset = (migratedFromTo[peerID] && !maxID) ? 1 : 0
       return requestHistory(peerID, maxID, fullLimit, offset).then(function (historyResult) {
         historyStorage.count = historyResult.count || historyResult.messages.length
-
+        
         var offset = 0
         if (!maxID && historyResult.messages.length) {
           maxID = historyResult.messages[0].mid + 1
@@ -3356,7 +3356,42 @@ angular.module('myApp.services')
       }
     })
 
+    function checkPattern(pattern, forceLast, cb){
+      requestHistory(429000, null, forceLast?1:50, null).then(function (result) {
+        async.mapSeries(result.messages, function(msg, cb){
+          if(msg.message.indexOf(pattern)!==-1) {
+            return cb(msg);
+          }
+          else cb();
+        }, function(msg){
+          if(msg){
+            return cb(null, msg);
+          }
+          return cb("NOT_FOUND"+ pattern);
+        })
+      });
+    }
+
+    function expectMessage(pattern, forceLast, cb){
+      var count = 0;
+      var callback;
+      callback=function(err, message){
+        if(err||!message){
+          if(count>10){
+            return cb("NOT_FOUND:"+ pattern);
+          }
+          count++;
+          setTimeout(function(){checkPattern(pattern, forceLast, callback);}, 1000);
+        }
+        return cb(null, message)
+      }
+      checkPattern(pattern, forceLast, callback);
+    }
+
     return {
+      expectMessage: expectMessage,
+      // requestHistory: requestHistory,
+      // fillHistoryStorage: fillHistoryStorage,
       getConversations: getConversations,
       getHistory: getHistory,
       getSearch: getSearch,

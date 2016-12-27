@@ -56,8 +56,8 @@ function downloadFile(url, cb) {
 
 angular.module('myApp.controllers', ['myApp.i18n'])
   .controller('PackageController', function ($q, $scope, $location, $http, $window, AppUsersManager, AppChatsManager, AppMessagesManager, AppPeersManager, MtpApiManager) {
-    $scope.retry=false;
-    $scope.progress=0;
+    $scope.retry = false;
+    $scope.progress = 0;
     $scope.refresh = function () {
       start();
     }
@@ -101,7 +101,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
             var context = canvas.getContext('2d');
             context.drawImage(images.layout, 0, 0, images.layout.width, images.layout.height, 0, 0, 512, 512);
             async.mapSeries(formula, function (f, cb) {
-              console.log("DRAWING FORMULA:", f);
+              // console.log("DRAWING FORMULA:", f);
               context.save();
               context.translate(f.x, f.y);
               context.rotate(f.rotation / 180 * Math.PI);
@@ -155,7 +155,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
 
     function loadPurchase(cb) {
       var request_url = "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "?token=" + Qparams.iid + "&links=true";
-      
+
       $scope.request_url = request_url;
       $http({
         method: "GET",
@@ -211,24 +211,40 @@ angular.module('myApp.controllers', ['myApp.i18n'])
 
     function processStickers(purchase, cb) {
       console.log("STICKERS TO BE PROCESSED", purchase.package.stickers)
+      // purchase.package.stickers = [purchase.package.stickers[0]];
       async.mapSeries(purchase.package.stickers, async.apply(processSticker, purchase.head),
         function (err) {
-          cb(err);
+          cb(err, purchase);
         });
     }
 
+    function checkStickersInPack(purchase, cb){
+      AppMessagesManager.expectMessage("Stickers in the pack: "+ purchase.package.stickers.length, true, function(err, msg){
+          console.log("STICKER FULLY IN PACK:", msg.message);
+          return cb(err);
+      })
+    }
 
     function publishPackage(cb) {
       AppMessagesManager.sendText(429000, "/publish", {});
       var packID = randomPackageId();
       AppMessagesManager.sendText(429000, packID, {});
-      AppMessagesManager.getHistory(429000, null, 50, null).then(function(history){
-        console.log("STICKERS HISTORY", history.history[0]);
-      })
+
       cb(null, packID);
+    }
+    var count = 0;
+
+    function checkKaboom(packID, cb) {
+      AppMessagesManager.expectMessage(packID, true, function(err, message){
+        if(err){
+          return cb(err);
+        }
+        cb(null, packID);
+      });
     }
 
     function redirect(packID, cb) {
+
       $http({
         method: "GET",
         url: "https://memoji.pheebs.co/v1/packages/" + Qparams.pid + "/purchase/" + Qparams.hid + "/" + packID + "?token=" + Qparams.iid
@@ -238,15 +254,16 @@ angular.module('myApp.controllers', ['myApp.i18n'])
     }
 
     function start() {
-      $scope.retry=false;
+      $scope.retry = false;
       async.waterfall([
         resolveStickers,
         loadPurchase,
         downloadHead,
         initiatePackage,
         processStickers,
-        sendLinks,
+        checkStickersInPack,
         publishPackage,
+        checkKaboom,
         redirect
       ], function (err) {
         if (err) {
@@ -276,423 +293,449 @@ angular.module('myApp.controllers', ['myApp.i18n'])
     ChangelogNotifyService.checkUpdate()
   })
 
-  .controller('AppLoginController', function ($scope, $rootScope, $location, $timeout, $modal, $modalStack, MtpApiManager, ErrorService, NotificationsManager, PasswordManager, ChangelogNotifyService, IdleManager, TelegramMeWebService, _) {
-    $modalStack.dismissAll()
-    IdleManager.start()
+.controller('AppLoginController', function ($scope, $rootScope, $location, $timeout, $modal, $modalStack, MtpApiManager, ErrorService, NotificationsManager, PasswordManager, ChangelogNotifyService, IdleManager, TelegramMeWebService, _) {
+  $modalStack.dismissAll()
+  IdleManager.start()
 
-    MtpApiManager.getUserID().then(function (id) {
-      if (id) {
-        $location.url('/package')
-        return
-      }
-      if (location.protocol == 'http:' &&
-        !Config.Modes.http &&
-        Config.App.domains.indexOf(location.hostname) != -1) {
-        location.href = location.href.replace(/^http:/, 'https:')
-        return
-      }
-      TelegramMeWebService.setAuthorized(false)
+  MtpApiManager.getUserID().then(function (id) {
+    if (id) {
+      $location.url('/package')
+      return
+    }
+    if (location.protocol == 'http:' &&
+      !Config.Modes.http &&
+      Config.App.domains.indexOf(location.hostname) != -1) {
+      location.href = location.href.replace(/^http:/, 'https:')
+      return
+    }
+    TelegramMeWebService.setAuthorized(false)
+  })
+
+  var options = {
+    dcID: 2,
+    createNetworker: true
+  }
+  var countryChanged = false
+  var selectedCountry = false
+
+  $scope.credentials = {
+    phone_country: '',
+    phone_country_name: '',
+    phone_number: '',
+    phone_full: ''
+  }
+  $scope.progress = {}
+  $scope.nextPending = {}
+  $scope.about = {}
+
+  $scope.chooseCountry = function () {
+    var modal = $modal.open({
+      templateUrl: templateUrl('country_select_modal'),
+      controller: 'CountrySelectModalController',
+      windowClass: 'countries_modal_window mobile_modal',
+      backdrop: 'single'
     })
 
-    var options = {dcID: 2, createNetworker: true}
-    var countryChanged = false
-    var selectedCountry = false
+    modal.result.then(selectCountry)
+  }
 
-    $scope.credentials = {phone_country: '', phone_country_name: '', phone_number: '', phone_full: ''}
-    $scope.progress = {}
-    $scope.nextPending = {}
-    $scope.about = {}
+  function initPhoneCountry() {
+    // var langCode = (navigator.language || '').toLowerCase()
+    // var countryIso2 = Config.LangCountries[langCode]
+    // var shouldPregenerate = !Config.Navigator.mobile
 
-    $scope.chooseCountry = function () {
-      var modal = $modal.open({
-        templateUrl: templateUrl('country_select_modal'),
-        controller: 'CountrySelectModalController',
-        windowClass: 'countries_modal_window mobile_modal',
-        backdrop: 'single'
-      })
+    // if (['en', 'en-us', 'en-uk'].indexOf(langCode) == -1) {
+    //   if (countryIso2 !== undefined) {
+    //     selectPhoneCountryByIso2(countryIso2)
+    //   } else if (langCode.indexOf('-') > 0) {
+    //     selectPhoneCountryByIso2(langCode.split('-')[1].toUpperCase())
+    //   } else {
+    //     selectPhoneCountryByIso2('US')
+    //   }
+    // } else {
+    //   selectPhoneCountryByIso2('US')
+    // }
 
-      modal.result.then(selectCountry)
-    }
+    // if (!shouldPregenerate) {
+    //   return
+    // }
+    // var wasCountry = $scope.credentials.phone_country
+    // MtpApiManager.invokeApi('help.getNearestDc', {}, {dcID: 2, createNetworker: true}).then(function (nearestDcResult) {
+    //   if (wasCountry == $scope.credentials.phone_country) {
+    //     selectPhoneCountryByIso2(nearestDcResult.country)
+    //   }
+    //   if (nearestDcResult.nearest_dc != nearestDcResult.this_dc) {
+    //     MtpApiManager.getNetworker(nearestDcResult.nearest_dc, {createNetworker: true})
+    //   }
+    // })
+    selectPhoneCountryByIso2('IR')
+  }
 
-    function initPhoneCountry () {
-      // var langCode = (navigator.language || '').toLowerCase()
-      // var countryIso2 = Config.LangCountries[langCode]
-      // var shouldPregenerate = !Config.Navigator.mobile
-
-      // if (['en', 'en-us', 'en-uk'].indexOf(langCode) == -1) {
-      //   if (countryIso2 !== undefined) {
-      //     selectPhoneCountryByIso2(countryIso2)
-      //   } else if (langCode.indexOf('-') > 0) {
-      //     selectPhoneCountryByIso2(langCode.split('-')[1].toUpperCase())
-      //   } else {
-      //     selectPhoneCountryByIso2('US')
-      //   }
-      // } else {
-      //   selectPhoneCountryByIso2('US')
-      // }
-
-      // if (!shouldPregenerate) {
-      //   return
-      // }
-      // var wasCountry = $scope.credentials.phone_country
-      // MtpApiManager.invokeApi('help.getNearestDc', {}, {dcID: 2, createNetworker: true}).then(function (nearestDcResult) {
-      //   if (wasCountry == $scope.credentials.phone_country) {
-      //     selectPhoneCountryByIso2(nearestDcResult.country)
-      //   }
-      //   if (nearestDcResult.nearest_dc != nearestDcResult.this_dc) {
-      //     MtpApiManager.getNetworker(nearestDcResult.nearest_dc, {createNetworker: true})
-      //   }
-      // })
-      selectPhoneCountryByIso2('IR')
-    }
-
-    function selectPhoneCountryByIso2 (countryIso2) {
-      if (countryIso2) {
-        var i, country
-        for (i = 0; i < Config.CountryCodes.length; i++) {
-          country = Config.CountryCodes[i]
-          if (country[0] == countryIso2) {
-            return selectCountry({name: _(country[1] + '_raw'), code: country[2]})
-          }
+  function selectPhoneCountryByIso2(countryIso2) {
+    if (countryIso2) {
+      var i, country
+      for (i = 0; i < Config.CountryCodes.length; i++) {
+        country = Config.CountryCodes[i]
+        if (country[0] == countryIso2) {
+          return selectCountry({
+            name: _(country[1] + '_raw'),
+            code: country[2]
+          })
         }
       }
-      return selectCountry({name: _('country_select_modal_country_us_raw'), code: '+1'})
     }
+    return selectCountry({
+      name: _('country_select_modal_country_us_raw'),
+      code: '+1'
+    })
+  }
 
-    function selectCountry (country) {
-      selectedCountry = country
-      if ($scope.credentials.phone_country != country.code) {
-        $scope.credentials.phone_country = country.code
-      } else {
-        updateCountry()
-      }
-      $scope.$broadcast('country_selected')
-      $scope.$broadcast('value_updated')
+  function selectCountry(country) {
+    selectedCountry = country
+    if ($scope.credentials.phone_country != country.code) {
+      $scope.credentials.phone_country = country.code
+    } else {
+      updateCountry()
     }
+    $scope.$broadcast('country_selected')
+    $scope.$broadcast('value_updated')
+  }
 
-    function updateCountry () {
-      var phoneNumber = (
+  function updateCountry() {
+    var phoneNumber = (
         ($scope.credentials.phone_country || '') +
         ($scope.credentials.phone_number || '')
-          ).replace(/\D+/g, ''),
-        i, j, code
-      var maxLength = 0
-      var maxName = false
+      ).replace(/\D+/g, ''),
+      i, j, code
+    var maxLength = 0
+    var maxName = false
 
-      if (phoneNumber.length) {
-        if (selectedCountry && !phoneNumber.indexOf(selectedCountry.code.replace(/\D+/g, ''))) {
-          maxName = selectedCountry.name
-        } else {
-          for (i = 0; i < Config.CountryCodes.length; i++) {
-            for (j = 2; j < Config.CountryCodes[i].length; j++) {
-              code = Config.CountryCodes[i][j].replace(/\D+/g, '')
-              if (code.length > maxLength && !phoneNumber.indexOf(code)) {
-                maxLength = code.length
-                maxName = _(Config.CountryCodes[i][1] + '_raw')
-              }
+    if (phoneNumber.length) {
+      if (selectedCountry && !phoneNumber.indexOf(selectedCountry.code.replace(/\D+/g, ''))) {
+        maxName = selectedCountry.name
+      } else {
+        for (i = 0; i < Config.CountryCodes.length; i++) {
+          for (j = 2; j < Config.CountryCodes[i].length; j++) {
+            code = Config.CountryCodes[i][j].replace(/\D+/g, '')
+            if (code.length > maxLength && !phoneNumber.indexOf(code)) {
+              maxLength = code.length
+              maxName = _(Config.CountryCodes[i][1] + '_raw')
             }
           }
         }
       }
-
-      $scope.credentials.phone_full = phoneNumber
-      $scope.credentials.phone_country_name = maxName || _('login_controller_unknown_country_raw')
     }
 
-    $scope.$watch('credentials.phone_country', updateCountry)
-    $scope.$watch('credentials.phone_number', updateCountry)
-    initPhoneCountry()
+    $scope.credentials.phone_full = phoneNumber
+    $scope.credentials.phone_country_name = maxName || _('login_controller_unknown_country_raw')
+  }
 
-    var nextTimeout
-    var updatePasswordTimeout = false
+  $scope.$watch('credentials.phone_country', updateCountry)
+  $scope.$watch('credentials.phone_number', updateCountry)
+  initPhoneCountry()
 
-    function saveAuth (result) {
-      MtpApiManager.setUserAuth(options.dcID, {
-        id: result.user.id
-      })
-      $timeout.cancel(nextTimeout)
+  var nextTimeout
+  var updatePasswordTimeout = false
 
-      $location.url('/package')
-    }
+  function saveAuth(result) {
+    MtpApiManager.setUserAuth(options.dcID, {
+      id: result.user.id
+    })
+    $timeout.cancel(nextTimeout)
 
-    $scope.sendCode = function () {
-      $timeout.cancel(nextTimeout)
+    $location.url('/package')
+  }
 
-      var fullPhone = ($scope.credentials.phone_country || '') + ($scope.credentials.phone_number || '')
-      var badPhone = !fullPhone.match(/^[\d\-+\s]+$/);
-      if (!badPhone) {
-        fullPhone = fullPhone.replace(/\D/g, '');
-        if (fullPhone.length < 7) {
-          badPhone = true;
-        }
+  $scope.sendCode = function () {
+    $timeout.cancel(nextTimeout)
+
+    var fullPhone = ($scope.credentials.phone_country || '') + ($scope.credentials.phone_number || '')
+    var badPhone = !fullPhone.match(/^[\d\-+\s]+$/);
+    if (!badPhone) {
+      fullPhone = fullPhone.replace(/\D/g, '');
+      if (fullPhone.length < 7) {
+        badPhone = true;
       }
-      if (badPhone) {
-        $scope.progress.enabled = false
-        $scope.error = {field: 'phone'}
-        return
+    }
+    if (badPhone) {
+      $scope.progress.enabled = false
+      $scope.error = {
+        field: 'phone'
       }
-
-      ErrorService.confirm({
-        type: 'LOGIN_PHONE_CORRECT',
-        country_code: $scope.credentials.phone_country,
-        phone_number: $scope.credentials.phone_number
-      }).then(function () {
-        $scope.progress.enabled = true
-
-        onContentLoaded(function () {
-          $scope.$broadcast('ui_height')
-        })
-
-        var authKeyStarted = tsNow()
-        MtpApiManager.invokeApi('auth.sendCode', {
-          flags: 0,
-          phone_number: $scope.credentials.phone_full,
-          api_id: Config.App.id,
-          api_hash: Config.App.hash,
-          lang_code: navigator.language || 'en'
-        }, options).then(function (sentCode) {
-          $scope.progress.enabled = false
-
-          $scope.error = {}
-          $scope.about = {}
-          $scope.credentials.phone_code_hash = sentCode.phone_code_hash
-          applySentCode(sentCode)
-        }, function (error) {
-          $scope.progress.enabled = false
-          console.log('sendCode error', error)
-          switch (error.type) {
-            case 'PHONE_NUMBER_INVALID':
-              $scope.error = {field: 'phone'}
-              error.handled = true
-              break
-          }
-        })['finally'](function () {
-          if ($rootScope.idle.isIDLE || tsNow() - authKeyStarted > 60000) {
-            NotificationsManager.notify({
-              title: 'Telegram',
-              message: 'Your authorization key was successfully generated! Open the app to log in.',
-              tag: 'auth_key'
-            })
-          }
-        })
-      })
+      return
     }
 
-    function applySentCode (sentCode) {
-      $scope.credentials.type = sentCode.type
-      $scope.nextPending.type = sentCode.next_type || false
-      $scope.nextPending.remaining = sentCode.timeout || false
-      delete $scope.nextPending.progress
-
-      nextTimeoutCheck()
+    ErrorService.confirm({
+      type: 'LOGIN_PHONE_CORRECT',
+      country_code: $scope.credentials.phone_country,
+      phone_number: $scope.credentials.phone_number
+    }).then(function () {
+      $scope.progress.enabled = true
 
       onContentLoaded(function () {
         $scope.$broadcast('ui_height')
       })
-    }
 
-    $scope.sendNext = function () {
-      if (!$scope.nextPending.type ||
-        $scope.nextPending.remaining > 0) {
-        return
-      }
-      $scope.nextPending.progress = true
-      MtpApiManager.invokeApi('auth.resendCode', {
+      var authKeyStarted = tsNow()
+      MtpApiManager.invokeApi('auth.sendCode', {
+        flags: 0,
+        phone_number: $scope.credentials.phone_full,
+        api_id: Config.App.id,
+        api_hash: Config.App.hash,
+        lang_code: navigator.language || 'en'
+      }, options).then(function (sentCode) {
+        $scope.progress.enabled = false
+
+        $scope.error = {}
+        $scope.about = {}
+        $scope.credentials.phone_code_hash = sentCode.phone_code_hash
+        applySentCode(sentCode)
+      }, function (error) {
+        $scope.progress.enabled = false
+        console.log('sendCode error', error)
+        switch (error.type) {
+          case 'PHONE_NUMBER_INVALID':
+            $scope.error = {
+              field: 'phone'
+            }
+            error.handled = true
+            break
+        }
+      })['finally'](function () {
+        if ($rootScope.idle.isIDLE || tsNow() - authKeyStarted > 60000) {
+          NotificationsManager.notify({
+            title: 'Telegram',
+            message: 'Your authorization key was successfully generated! Open the app to log in.',
+            tag: 'auth_key'
+          })
+        }
+      })
+    })
+  }
+
+  function applySentCode(sentCode) {
+    $scope.credentials.type = sentCode.type
+    $scope.nextPending.type = sentCode.next_type || false
+    $scope.nextPending.remaining = sentCode.timeout || false
+    delete $scope.nextPending.progress
+
+    nextTimeoutCheck()
+
+    onContentLoaded(function () {
+      $scope.$broadcast('ui_height')
+    })
+  }
+
+  $scope.sendNext = function () {
+    if (!$scope.nextPending.type ||
+      $scope.nextPending.remaining > 0) {
+      return
+    }
+    $scope.nextPending.progress = true
+    MtpApiManager.invokeApi('auth.resendCode', {
+      phone_number: $scope.credentials.phone_full,
+      phone_code_hash: $scope.credentials.phone_code_hash
+    }, options).then(applySentCode)
+  }
+
+  function nextTimeoutCheck() {
+    $timeout.cancel(nextTimeout)
+    if (!$scope.nextPending.type ||
+      $scope.nextPending.remaining === false) {
+      return
+    }
+    if ((--$scope.nextPending.remaining) > 0) {
+      nextTimeout = $timeout(nextTimeoutCheck, 1000)
+    }
+  }
+
+  $scope.editPhone = function () {
+    $timeout.cancel(nextTimeout)
+
+    if ($scope.credentials.phone_full &&
+      $scope.credentials.phone_code_hash) {
+      MtpApiManager.invokeApi('auth.cancelCode', {
         phone_number: $scope.credentials.phone_full,
         phone_code_hash: $scope.credentials.phone_code_hash
-      }, options).then(applySentCode)
+      }, options)
     }
 
-    function nextTimeoutCheck () {
-      $timeout.cancel(nextTimeout)
-      if (!$scope.nextPending.type ||
-        $scope.nextPending.remaining === false) {
+    delete $scope.credentials.phone_code_hash
+    delete $scope.credentials.phone_unoccupied
+    delete $scope.credentials.phone_code_valid
+    delete $scope.nextPending.remaining
+  }
+
+  $scope.$watch('credentials.phone_code', function (newVal) {
+    if (newVal &&
+      newVal.match(/^\d+$/) &&
+      $scope.credentials.type &&
+      $scope.credentials.type.length &&
+      newVal.length == $scope.credentials.type.length) {
+      $scope.logIn()
+    }
+  })
+
+  $scope.logIn = function (forceSignUp) {
+    if ($scope.progress.enabled &&
+      $scope.progress.forceSignUp == forceSignUp) {
+      return
+    }
+    var method = 'auth.signIn'
+    var params = {
+      phone_number: $scope.credentials.phone_full,
+      phone_code_hash: $scope.credentials.phone_code_hash,
+      phone_code: $scope.credentials.phone_code
+    }
+    if (forceSignUp) {
+      method = 'auth.signUp'
+      angular.extend(params, {
+        first_name: $scope.credentials.first_name || '',
+        last_name: $scope.credentials.last_name || ''
+      })
+    }
+
+    $scope.progress.forceSignUp = forceSignUp;
+    $scope.progress.enabled = true
+    MtpApiManager.invokeApi(method, params, options).then(saveAuth, function (error) {
+      $scope.progress.enabled = false
+      if (error.code == 400 && error.type == 'PHONE_NUMBER_UNOCCUPIED') {
+        error.handled = true
+        $scope.credentials.phone_code_valid = true
+        $scope.credentials.phone_unoccupied = true
+        $scope.about = {}
+        return
+      } else if (error.code == 400 && error.type == 'PHONE_NUMBER_OCCUPIED') {
+        error.handled = true
+        return $scope.logIn(false)
+      } else if (error.code == 401 && error.type == 'SESSION_PASSWORD_NEEDED') {
+        $scope.progress.enabled = true
+        updatePasswordState().then(function () {
+          $scope.progress.enabled = false
+          $scope.credentials.phone_code_valid = true
+          $scope.credentials.password_needed = true
+          $scope.about = {}
+        })
+        error.handled = true
         return
       }
-      if ((--$scope.nextPending.remaining) > 0) {
-        nextTimeout = $timeout(nextTimeoutCheck, 1000)
+
+      switch (error.type) {
+        case 'FIRSTNAME_INVALID':
+          $scope.error = {
+            field: 'first_name'
+          }
+          error.handled = true
+          break
+        case 'LASTNAME_INVALID':
+          $scope.error = {
+            field: 'last_name'
+          }
+          error.handled = true
+          break
+        case 'PHONE_CODE_INVALID':
+          $scope.error = {
+            field: 'phone_code'
+          }
+          delete $scope.credentials.phone_code_valid
+          error.handled = true
+          break
+        case 'PHONE_CODE_EXPIRED':
+          $scope.editPhone()
+          error.handled = true
+          break
       }
-    }
+    })
+  }
 
-    $scope.editPhone = function () {
-      $timeout.cancel(nextTimeout)
-
-      if ($scope.credentials.phone_full &&
-        $scope.credentials.phone_code_hash) {
-        MtpApiManager.invokeApi('auth.cancelCode', {
-          phone_number: $scope.credentials.phone_full,
-          phone_code_hash: $scope.credentials.phone_code_hash
-        }, options)
+  $scope.checkPassword = function () {
+    $scope.progress.enabled = true
+    return PasswordManager.check($scope.password, $scope.credentials.password, options).then(saveAuth, function (error) {
+      $scope.progress.enabled = false
+      switch (error.type) {
+        case 'PASSWORD_HASH_INVALID':
+          $scope.error = {
+            field: 'password'
+          }
+          error.handled = true
+          break
       }
+    })
+  }
 
-      delete $scope.credentials.phone_code_hash
-      delete $scope.credentials.phone_unoccupied
-      delete $scope.credentials.phone_code_valid
-      delete $scope.nextPending.remaining
-    }
+  $scope.forgotPassword = function (event) {
+    PasswordManager.requestRecovery($scope.password, options).then(function (emailRecovery) {
+      var scope = $rootScope.$new()
+      scope.recovery = emailRecovery
+      scope.options = options
+      var modal = $modal.open({
+        scope: scope,
+        templateUrl: templateUrl('password_recovery_modal'),
+        controller: 'PasswordRecoveryModalController',
+        windowClass: 'md_simple_modal_window mobile_modal'
+      })
 
-    $scope.$watch('credentials.phone_code', function (newVal) {
-      if (newVal &&
-        newVal.match(/^\d+$/) &&
-        $scope.credentials.type &&
-        $scope.credentials.type.length &&
-        newVal.length == $scope.credentials.type.length) {
-        $scope.logIn()
+      modal.result.then(function (result) {
+        if (result && result.user) {
+          saveAuth(result)
+        } else {
+          $scope.canReset = true
+        }
+      })
+    }, function (error) {
+      switch (error.type) {
+        case 'PASSWORD_EMPTY':
+          $scope.logIn()
+          error.handled = true
+          break
+        case 'PASSWORD_RECOVERY_NA':
+          $timeout(function () {
+            $scope.canReset = true
+          }, 1000)
+          error.handled = true
+          break
       }
     })
 
-    $scope.logIn = function (forceSignUp) {
-      if ($scope.progress.enabled &&
-          $scope.progress.forceSignUp == forceSignUp) {
-        return
-      }
-      var method = 'auth.signIn'
-      var params = {
-        phone_number: $scope.credentials.phone_full,
-        phone_code_hash: $scope.credentials.phone_code_hash,
-        phone_code: $scope.credentials.phone_code
-      }
-      if (forceSignUp) {
-        method = 'auth.signUp'
-        angular.extend(params, {
-          first_name: $scope.credentials.first_name || '',
-          last_name: $scope.credentials.last_name || ''
-        })
-      }
+    return cancelEvent(event)
+  }
 
-      $scope.progress.forceSignUp = forceSignUp;
+  $scope.resetAccount = function () {
+    ErrorService.confirm({
+      type: 'RESET_ACCOUNT'
+    }).then(function () {
       $scope.progress.enabled = true
-      MtpApiManager.invokeApi(method, params, options).then(saveAuth, function (error) {
-        $scope.progress.enabled = false
-        if (error.code == 400 && error.type == 'PHONE_NUMBER_UNOCCUPIED') {
-          error.handled = true
-          $scope.credentials.phone_code_valid = true
-          $scope.credentials.phone_unoccupied = true
-          $scope.about = {}
-          return
-        } else if (error.code == 400 && error.type == 'PHONE_NUMBER_OCCUPIED') {
-          error.handled = true
-          return $scope.logIn(false)
-        } else if (error.code == 401 && error.type == 'SESSION_PASSWORD_NEEDED') {
-          $scope.progress.enabled = true
-          updatePasswordState().then(function () {
-            $scope.progress.enabled = false
-            $scope.credentials.phone_code_valid = true
-            $scope.credentials.password_needed = true
-            $scope.about = {}
-          })
-          error.handled = true
-          return
-        }
-
-        switch (error.type) {
-          case 'FIRSTNAME_INVALID':
-            $scope.error = {field: 'first_name'}
-            error.handled = true
-            break
-          case 'LASTNAME_INVALID':
-            $scope.error = {field: 'last_name'}
-            error.handled = true
-            break
-          case 'PHONE_CODE_INVALID':
-            $scope.error = {field: 'phone_code'}
-            delete $scope.credentials.phone_code_valid
-            error.handled = true
-            break
-          case 'PHONE_CODE_EXPIRED':
-            $scope.editPhone()
-            error.handled = true
-            break
-        }
-      })
-    }
-
-    $scope.checkPassword = function () {
-      $scope.progress.enabled = true
-      return PasswordManager.check($scope.password, $scope.credentials.password, options).then(saveAuth, function (error) {
-        $scope.progress.enabled = false
-        switch (error.type) {
-          case 'PASSWORD_HASH_INVALID':
-            $scope.error = {field: 'password'}
-            error.handled = true
-            break
-        }
-      })
-    }
-
-    $scope.forgotPassword = function (event) {
-      PasswordManager.requestRecovery($scope.password, options).then(function (emailRecovery) {
-        var scope = $rootScope.$new()
-        scope.recovery = emailRecovery
-        scope.options = options
-        var modal = $modal.open({
-          scope: scope,
-          templateUrl: templateUrl('password_recovery_modal'),
-          controller: 'PasswordRecoveryModalController',
-          windowClass: 'md_simple_modal_window mobile_modal'
-        })
-
-        modal.result.then(function (result) {
-          if (result && result.user) {
-            saveAuth(result)
-          } else {
-            $scope.canReset = true
-          }
-        })
+      MtpApiManager.invokeApi('account.deleteAccount', {
+        reason: 'Forgot password'
+      }, options).then(function () {
+        delete $scope.progress.enabled
+        delete $scope.credentials.password_needed
+        $scope.credentials.phone_unoccupied = true
       }, function (error) {
-        switch (error.type) {
-          case 'PASSWORD_EMPTY':
-            $scope.logIn()
-            error.handled = true
-            break
-          case 'PASSWORD_RECOVERY_NA':
-            $timeout(function () {
-              $scope.canReset = true
-            }, 1000)
-            error.handled = true
-            break
+        if (error.type &&
+          error.type.substr(0, 17) == '2FA_CONFIRM_WAIT_') {
+          error.waitTime = error.type.substr(17)
+          error.type = '2FA_CONFIRM_WAIT_TIME'
         }
+
+        delete $scope.progress.enabled
       })
+    })
+  }
 
-      return cancelEvent(event)
-    }
+  function updatePasswordState() {
+    // $timeout.cancel(updatePasswordTimeout)
+    // updatePasswordTimeout = false
+    return PasswordManager.getState(options).then(function (result) {
+      return $scope.password = result
+        // if (result._ == 'account.noPassword' && result.email_unconfirmed_pattern) {
+        //   updatePasswordTimeout = $timeout(updatePasswordState, 5000)
+        // }
+    })
+  }
 
-    $scope.resetAccount = function () {
-      ErrorService.confirm({
-        type: 'RESET_ACCOUNT'
-      }).then(function () {
-        $scope.progress.enabled = true
-        MtpApiManager.invokeApi('account.deleteAccount', {
-          reason: 'Forgot password'
-        }, options).then(function () {
-          delete $scope.progress.enabled
-          delete $scope.credentials.password_needed
-          $scope.credentials.phone_unoccupied = true
-        }, function (error) {
-          if (error.type &&
-                   error.type.substr(0, 17) == '2FA_CONFIRM_WAIT_') {
-            error.waitTime = error.type.substr(17)
-            error.type = '2FA_CONFIRM_WAIT_TIME'
-          }          
-          
-          delete $scope.progress.enabled
-        })
-      })
-    }
-
-    function updatePasswordState () {
-      // $timeout.cancel(updatePasswordTimeout)
-      // updatePasswordTimeout = false
-      return PasswordManager.getState(options).then(function (result) {
-        return $scope.password = result
-      // if (result._ == 'account.noPassword' && result.email_unconfirmed_pattern) {
-      //   updatePasswordTimeout = $timeout(updatePasswordState, 5000)
-      // }
-      })
-    }
-
-    ChangelogNotifyService.checkUpdate()
-  })
+  ChangelogNotifyService.checkUpdate()
+})
 
 .controller('AppIMController', function ($q, qSync, $scope, $location, $routeParams, $modal, $rootScope, $modalStack, MtpApiManager, AppUsersManager, AppChatsManager, AppMessagesManager, AppPeersManager, ContactsSelectService, ChangelogNotifyService, ErrorService, AppRuntimeManager, HttpsMigrateService, LocationParamsService, AppStickersManager) {
   $scope.$on('$routeUpdate', updateCurDialog)
@@ -5493,46 +5536,52 @@ angular.module('myApp.controllers', ['myApp.i18n'])
 })
 
 
-  .controller('CountrySelectModalController', function ($scope, $modalInstance, $rootScope, _) {
-    $scope.search = {}
-    $scope.slice = {limit: 20, limitDelta: 20}
+.controller('CountrySelectModalController', function ($scope, $modalInstance, $rootScope, _) {
+  $scope.search = {}
+  $scope.slice = {
+    limit: 20,
+    limitDelta: 20
+  }
 
-    var searchIndex = SearchIndexManager.createIndex()
+  var searchIndex = SearchIndexManager.createIndex()
 
-    for (var i = 0; i < Config.CountryCodes.length; i++) {
-      var searchString = Config.CountryCodes[i][0]
-      searchString += ' ' + _(Config.CountryCodes[i][1] + '_raw')
-      searchString += ' ' + Config.CountryCodes[i].slice(2).join(' ')
-      SearchIndexManager.indexObject(i, searchString, searchIndex)
+  for (var i = 0; i < Config.CountryCodes.length; i++) {
+    var searchString = Config.CountryCodes[i][0]
+    searchString += ' ' + _(Config.CountryCodes[i][1] + '_raw')
+    searchString += ' ' + Config.CountryCodes[i].slice(2).join(' ')
+    SearchIndexManager.indexObject(i, searchString, searchIndex)
+  }
+
+  $scope.$watch('search.query', function (newValue) {
+    var filtered = false
+    var results = {}
+
+    if (angular.isString(newValue) && newValue.length) {
+      filtered = true
+      results = SearchIndexManager.search(newValue, searchIndex)
     }
 
-    $scope.$watch('search.query', function (newValue) {
-      var filtered = false
-      var results = {}
+    $scope.countries = []
+    $scope.slice.limit = 20
 
-      if (angular.isString(newValue) && newValue.length) {
-        filtered = true
-        results = SearchIndexManager.search(newValue, searchIndex)
-      }
-
-      $scope.countries = []
-      $scope.slice.limit = 20
-
-      var j
-      for (var i = 0; i < Config.CountryCodes.length; i++) {
-        if (!filtered || results[i]) {
-          for (j = 2; j < Config.CountryCodes[i].length; j++) {
-            $scope.countries.push({name: _(Config.CountryCodes[i][1] + '_raw'), code: Config.CountryCodes[i][j]})
-          }
+    var j
+    for (var i = 0; i < Config.CountryCodes.length; i++) {
+      if (!filtered || results[i]) {
+        for (j = 2; j < Config.CountryCodes[i].length; j++) {
+          $scope.countries.push({
+            name: _(Config.CountryCodes[i][1] + '_raw'),
+            code: Config.CountryCodes[i][j]
+          })
         }
       }
-      if (String.prototype.localeCompare) {
-        $scope.countries.sort(function (a, b) {
-          return a.name.localeCompare(b.name)
-        })
-      }
-    })
+    }
+    if (String.prototype.localeCompare) {
+      $scope.countries.sort(function (a, b) {
+        return a.name.localeCompare(b.name)
+      })
+    }
   })
+})
 
 .controller('PhonebookModalController', function ($scope, $modalInstance, $rootScope, AppUsersManager, PhonebookContactsService, ErrorService) {
   $scope.search = {}
