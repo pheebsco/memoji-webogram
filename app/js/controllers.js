@@ -275,6 +275,13 @@ angular.module('myApp.controllers', ['myApp.i18n'])
     }
     start();
   })
+
+  .controller('TOSController', function($scope, $location) {
+    $scope.proceed = function() {
+      $location.url('/login')
+    }
+  })
+
   .controller('AppWelcomeController', function ($scope, $location, MtpApiManager, ErrorService, ChangelogNotifyService) {
     MtpApiManager.getUserID().then(function (id) {
       if (id) {

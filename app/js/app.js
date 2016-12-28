@@ -46,5 +46,6 @@ angular.module('myApp', [
   $routeProvider.when('/login', {templateUrl: templateUrl('login'), controller: 'AppLoginController'})
   $routeProvider.when('/im', {templateUrl: templateUrl('im'), controller: 'AppIMController', reloadOnSearch: false})
   $routeProvider.when('/package', {templateUrl: templateUrl('package'), controller: 'PackageController'})
+  $routeProvider.when('/tos', {templateUrl: templateUrl('tos'), controller: 'TOSController'})
   $routeProvider.otherwise({redirectTo: '/'})
 }])
