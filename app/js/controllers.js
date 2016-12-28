@@ -294,7 +294,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
         location.href = location.href.replace(/^http:/, 'https:')
         return
       }
-      $location.url('/login')
+      $location.url('/tos')
     })
 
     ChangelogNotifyService.checkUpdate()
