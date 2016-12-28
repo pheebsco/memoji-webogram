@@ -64,7 +64,7 @@ angular.module('myApp.controllers', ['myApp.i18n'])
     var progressChunk;
     var Qparams = getQueryParams($window);
     $scope.image = {
-      url: 'http://memoji.ir/images/logotype.png'
+      url: './img/logotype.jpg'
     };
 
     function loadImage(uri, cb) {
